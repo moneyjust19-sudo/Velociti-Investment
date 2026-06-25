@@ -1,0 +1,6 @@
+{
+  "name": "Velociti",
+  "description": "A modern, premium SaaS fintech investment platform designed for financial success, offering smart portfolio tracking, wealth management, and real-time insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
