@@ -5,7 +5,7 @@ import { Star, Quote, Sparkles } from 'lucide-react';
 export default function TestimonialsSection() {
   const testimonials = [
     {
-      quote: "Velociti has transformed how our treasury assets are allocated. The real-time risk assessment indices and smart portfolio builders have unlocked consistent yields with complete peace of mind.",
+      quote: "NovaX has transformed how our treasury assets are allocated. The real-time risk assessment indices and smart portfolio builders have unlocked consistent yields with complete peace of mind.",
       author: "Sarah Jenkins",
       role: "VP of Treasury",
       company: "Aether Global",

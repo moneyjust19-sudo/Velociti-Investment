@@ -151,9 +151,9 @@ export default function HeroSection({ onCtaClick }: HeroSectionProps) {
                 <div className="flex justify-between items-center mt-3 mb-4">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xs font-bold">
-                      V
+                      N
                     </div>
-                    <span className="text-xs font-bold font-display text-slate-900 dark:text-white">Velociti</span>
+                    <span className="text-xs font-bold font-display text-slate-900 dark:text-white">NovaX</span>
                   </div>
                   <div className="w-6 h-6 bg-slate-200 dark:bg-slate-900 rounded-full overflow-hidden">
                     <img className="w-full h-full object-cover" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=60" alt="Avatar" referrerPolicy="no-referrer" />

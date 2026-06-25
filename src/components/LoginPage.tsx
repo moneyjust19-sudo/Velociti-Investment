@@ -25,7 +25,7 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
       setSuccess(true);
       setTimeout(() => {
         if (demoType === 'premium') {
-          onLoginSuccess('Sophia Bennett', 'sophia.bennett@velociti.io');
+          onLoginSuccess('Sophia Bennett', 'sophia.bennett@novax.io');
         } else {
           onLoginSuccess('Alexander Wright', 'alex.wright@grow.io');
         }
@@ -104,7 +104,7 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
             <div className="text-center mb-8">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-medium mb-3">
                 <Shield size={12} />
-                <span>Velociti Secure Gateway</span>
+                <span>NovaX Secure Gateway</span>
               </div>
               <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-display">
                 {isLogin ? 'Welcome Back' : 'Create Account'}
@@ -149,7 +149,7 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
                   </span>
                   <input
                     type="email"
-                    placeholder="sophia@velociti.io"
+                    placeholder="sophia@novax.io"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all text-sm"
@@ -198,7 +198,7 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
 
             <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800 text-center">
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {isLogin ? "New to Velociti? " : "Already have an account? "}
+                {isLogin ? "New to NovaX? " : "Already have an account? "}
               </span>
               <button
                 onClick={() => {

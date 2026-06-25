@@ -30,10 +30,10 @@ export default function Navbar({ onLoginClick, isDark, onToggleTheme, isLoggedIn
           {/* Brand Logo matching reference */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-blue-500/10">
-              V
+              N
             </div>
             <span className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white font-display">
-              Velociti
+              NovaX
             </span>
           </div>
 

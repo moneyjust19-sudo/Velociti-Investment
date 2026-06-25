@@ -25,13 +25,13 @@ export default function Footer() {
           <div className="md:col-span-4 space-y-6 text-left">
             <div className="flex items-center gap-3 text-white">
               <div className="w-9 h-9 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold shadow-md">
-                V
+                N
               </div>
-              <span className="text-xl font-extrabold tracking-tight font-display">Velociti</span>
+              <span className="text-xl font-extrabold tracking-tight font-display">NovaX</span>
             </div>
 
             <p className="text-xs sm:text-sm text-slate-500 leading-relaxed max-w-xs">
-              Velociti is an institutional-grade digital investment architecture facilitating risk-adjusted growth portfolios and predictive AI asset modeling.
+              NovaX is an institutional-grade digital investment architecture facilitating risk-adjusted growth portfolios and predictive AI asset modeling.
             </p>
 
             <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-600 uppercase tracking-widest">
@@ -82,7 +82,7 @@ export default function Footer() {
                   </span>
                   <input
                     type="email"
-                    placeholder="investor@velociti.io"
+                    placeholder="investor@novax.io"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -106,7 +106,7 @@ export default function Footer() {
         <div className="pt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-[10px] text-slate-600 font-medium text-center sm:text-left">
           
           <div className="space-y-1">
-            <p>© {currentYear} Velociti Technologies Inc. All simulated rights reserved.</p>
+            <p>© {currentYear} NovaX Technologies Inc. All simulated rights reserved.</p>
             <p className="max-w-2xl text-slate-700 leading-normal">
               Disclaimer: All account balances, transactions, deposit activities, indices, stock performance, and AI-generated insights displayed within this website are entirely sandbox simulations and do not reflect real monetary capital, actual financial instruments, or certified professional investment advice.
             </p>

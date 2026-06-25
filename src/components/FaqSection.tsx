@@ -12,7 +12,7 @@ export default function FaqSection() {
 
   const faqs: FAQItem[] = [
     {
-      question: "How does Velociti protect my capital and investments?",
+      question: "How does NovaX protect my capital and investments?",
       answer: "We utilize multi-signature custodial architectures, state-of-the-art AES-256 end-to-end transport layer encryption, and secure linked bank authentication gateways. Your cash balances are protected by premium tier-1 clearing banks up to statutory clearing insurance limits."
     },
     {
@@ -29,7 +29,7 @@ export default function FaqSection() {
     },
     {
       question: "What are the fees associated with investing?",
-      answer: "Velociti is dedicated to democratization. There are zero account maintenance fees, zero management commissions on automated index portfolios, and zero trading fees on stock micro-shares."
+      answer: "NovaX is dedicated to democratization. There are zero account maintenance fees, zero management commissions on automated index portfolios, and zero trading fees on stock micro-shares."
     }
   ];
 

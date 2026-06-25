@@ -74,7 +74,7 @@ export default function HowItWorks() {
 
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">Sophia Bennett</h3>
-                <p className="text-xs text-slate-400 font-medium">Head of Investment Relations, Velociti</p>
+                <p className="text-xs text-slate-400 font-medium">Head of Investment Relations, NovaX</p>
               </div>
 
               <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-3 leading-relaxed">

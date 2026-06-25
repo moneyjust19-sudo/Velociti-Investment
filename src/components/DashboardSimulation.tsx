@@ -196,9 +196,9 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold shadow-md shadow-blue-500/20">
-                V
+                N
               </div>
-              <span className="text-xl font-bold font-display tracking-tight text-slate-900 dark:text-white">Velociti</span>
+              <span className="text-xl font-bold font-display tracking-tight text-slate-900 dark:text-white">NovaX</span>
               <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-mono text-[10px] uppercase font-bold tracking-wider">
                 Simulated Portfolios
               </span>
@@ -599,7 +599,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
 
                 <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-900 text-center flex items-center justify-center gap-2 text-xs text-slate-400 font-medium">
                   <ShieldCheck size={14} className="text-emerald-500" />
-                  <span>Trade clears instantly using Velociti ledger</span>
+                  <span>Trade clears instantly using NovaX ledger</span>
                 </div>
               </div>
             </motion.div>
@@ -620,7 +620,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
               <div className="max-w-2xl mx-auto text-center space-y-6">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-xs font-semibold">
                   <Sparkles size={14} className="animate-spin" style={{ animationDuration: '8s' }} />
-                  <span>Velociti AI Advisor • Active Analysis</span>
+                  <span>NovaX AI Advisor • Active Analysis</span>
                 </div>
 
                 <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-display">
@@ -632,7 +632,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
 
                 <div className="p-6 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800 text-left relative overflow-hidden">
                   <div className="absolute top-4 right-4 text-xs text-slate-300 dark:text-slate-700 font-mono">
-                    MODEL: VELOCITI-AI-PRO
+                    MODEL: NOVAX-AI-PRO
                   </div>
                   <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
                     {aiInsight}
