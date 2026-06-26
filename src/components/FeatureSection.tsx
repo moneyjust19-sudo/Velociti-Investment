@@ -98,7 +98,7 @@ export default function FeatureSection() {
               <div className="flex justify-between items-center mb-4">
                 <div>
                   <h4 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Weekly Wealth Accumulation</h4>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Simulated multi-asset growth performance</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Aggregate multi-asset growth performance</p>
                 </div>
                 <span className="text-xs font-bold font-mono text-indigo-500">$14.9K Active</span>
               </div>

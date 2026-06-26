@@ -164,7 +164,7 @@ export default function HeroSection({ onCtaClick }: HeroSectionProps) {
                 <div className="bg-gradient-to-tr from-blue-600 to-indigo-600 text-white rounded-3xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between h-40">
                   <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full blur-xl" />
                   <div>
-                    <span className="text-[10px] text-blue-100 uppercase font-bold tracking-wider">Simulated Balance</span>
+                    <span className="text-[10px] text-blue-100 uppercase font-bold tracking-wider">Portfolio Net Worth</span>
                     <h3 className="text-2xl font-black mt-1 font-mono tracking-tight">$45,543.00</h3>
                   </div>
                   <div className="flex justify-between items-center pt-4 border-t border-white/10 text-[10px] text-blue-100">

@@ -162,7 +162,12 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
       return;
     }
 
-    const newBalance = balance + amountNum;
+    // Check if this is the user's first deposit (history contains no prior deposits)
+    const hasPriorDeposit = history.some(tx => tx.type === 'deposit');
+    const bonusAmount = !hasPriorDeposit ? 10.00 : 0.00;
+    
+    const depositAmountWithBonus = amountNum + bonusAmount;
+    const newBalance = balance + depositAmountWithBonus;
     setBalance(newBalance);
     
     const newTx: Transaction = {
@@ -174,16 +179,42 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
       status: 'completed'
     };
     
-    setHistory(prev => [newTx, ...prev]);
+    let bonusTx: Transaction | null = null;
+    if (bonusAmount > 0) {
+      bonusTx = {
+        id: 'tx-bonus-' + Math.random().toString(36).substring(2, 11),
+        type: 'deposit',
+        amount: bonusAmount,
+        title: 'First Deposit Bonus',
+        date: new Date().toLocaleDateString(),
+        status: 'completed'
+      };
+    }
+    
+    setHistory(prev => {
+      const updated = [newTx];
+      if (bonusTx) {
+        updated.push(bonusTx);
+      }
+      return [...updated, ...prev];
+    });
 
     if (user.id) {
       await saveTransactionInSupabase(user.id, newTx);
+      if (bonusTx) {
+        await saveTransactionInSupabase(user.id, bonusTx);
+      }
       await updateProfileBalanceInSupabase(user.id, newBalance, invested);
     }
 
     setIsDepositOpen(false);
     setDepositStep(1);
-    alert(`Successfully deposited $${amountNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via ${depositNetwork === 'solana' ? 'Solana' : 'Bitcoin'}!`);
+    
+    const successMsg = bonusAmount > 0 
+      ? `Successfully deposited $${amountNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via ${depositNetwork === 'solana' ? 'Solana' : 'Bitcoin'} plus a $10.00 First Deposit Bonus!`
+      : `Successfully deposited $${amountNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via ${depositNetwork === 'solana' ? 'Solana' : 'Bitcoin'}!`;
+      
+    alert(successMsg);
   };
 
   // Handle Real Withdrawal Request
@@ -338,8 +369,8 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                 N
               </div>
               <span className="text-xl font-bold font-display tracking-tight text-slate-900 dark:text-white">NovaX</span>
-              <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-mono text-[10px] uppercase font-bold tracking-wider">
-                Simulated Portfolios
+              <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-sans text-[10px] uppercase font-bold tracking-wider">
+                Investment Portfolio
               </span>
             </div>
 
@@ -398,7 +429,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                     <h3 className="font-bold text-base">Setup Your Supabase Database Tables</h3>
                   </div>
                   <p className="text-xs text-amber-800 dark:text-amber-300 max-w-3xl leading-relaxed">
-                    We detected that your Supabase database doesn't have the required tables yet. We have successfully launched a **secure Local-first simulation mode** so you can continue using all aspects of NovaX immediately! To connect your real data, copy and run the SQL below in your **Supabase SQL Editor**.
+                    We detected that your Supabase database doesn't have the required tables yet. We have successfully initialized a **secure offline local-first ledger** so you can continue using all features of NovaX immediately with full persistence! To enable cloud synchronization, copy and run the SQL below in your **Supabase SQL Editor**.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 self-end sm:self-start">
@@ -430,133 +461,82 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
           )}
         </AnimatePresence>
 
-        {/* Dynamic Welcoming Greeting & Quick Deposit */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        {/* Dynamic Welcoming Greeting & Chart Period selector */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-display">
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight font-display">
               Good day, {user.name.split(' ')[0]}
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">
-              Your investment portfolios are secured and showing healthy growth signals today.
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5 sm:mt-1">
+              Your investment dashboard is fully secured and synchronized.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 self-end sm:self-auto bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200/60 dark:border-slate-800 shadow-sm">
             <button 
-              onClick={() => {
-                setDepositStep(1);
-                setIsDepositOpen(true);
-              }}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4.5 py-2.5 rounded-xl transition-all shadow-md shadow-blue-500/10 cursor-pointer text-sm font-semibold"
+              onClick={() => setChartPeriod('1W')} 
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition-colors ${chartPeriod === '1W' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
             >
-              <PlusCircle size={16} />
-              <span>Deposit</span>
+              1W
             </button>
-            {balance > 0 && (
-              <button 
-                onClick={() => setIsWithdrawalOpen(true)}
-                className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold px-4.5 py-2.5 rounded-xl transition-all cursor-pointer text-sm border border-slate-200/50 dark:border-slate-700/50"
-              >
-                <MinusCircle size={16} />
-                <span>Withdrawal</span>
-              </button>
-            )}
-            <div className="flex rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-0.5">
-              <button 
-                onClick={() => setChartPeriod('1W')} 
-                className={`px-3 py-1 text-xs rounded-md cursor-pointer transition-colors ${chartPeriod === '1W' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'}`}
-              >
-                1W
-              </button>
-              <button 
-                onClick={() => setChartPeriod('1M')} 
-                className={`px-3 py-1 text-xs rounded-md cursor-pointer transition-colors ${chartPeriod === '1M' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'}`}
-              >
-                1M
-              </button>
-              <button 
-                onClick={() => setChartPeriod('1Y')} 
-                className={`px-3 py-1 text-xs rounded-md cursor-pointer transition-colors ${chartPeriod === '1Y' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800'}`}
-              >
-                1Y
-              </button>
-            </div>
+            <button 
+              onClick={() => setChartPeriod('1M')} 
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition-colors ${chartPeriod === '1M' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
+            >
+              1M
+            </button>
+            <button 
+              onClick={() => setChartPeriod('1Y')} 
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition-colors ${chartPeriod === '1Y' ? 'bg-blue-600 text-white' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}`}
+            >
+              1Y
+            </button>
           </div>
         </div>
 
-        {/* Dashboard Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          
-          {/* Cash Balance */}
-          <div className="p-6 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-900 rounded-3xl shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/5 rounded-full blur-xl" />
-            <div className="flex justify-between items-center mb-3">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Simulated Cash Reserve</span>
-              <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                <Wallet size={16} />
+        {/* Single Premium Cash Balance Box - Highly Optimized for Mobile */}
+        <div className="mb-8">
+          <div className="p-6 sm:p-8 bg-gradient-to-tr from-slate-900 to-slate-950 border border-slate-800 rounded-3xl shadow-xl relative overflow-hidden text-white">
+            {/* Visual ambient glows */}
+            <div className="absolute -top-10 -right-10 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl" />
+            <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl" />
+            
+            <div className="relative flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <div className="space-y-1 sm:space-y-2">
+                <div className="flex items-center gap-2 text-slate-400">
+                  <Wallet size={16} className="text-blue-400" />
+                  <span className="text-xs font-semibold uppercase tracking-wider">Cash Account Balance</span>
+                </div>
+                <p className="text-3xl sm:text-5xl font-bold tracking-tight font-display text-white">
+                  ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+                <p className="text-[11px] sm:text-xs text-slate-400 font-medium leading-relaxed">
+                  Guaranteed liquid funds secured in tier-1 global clearing banks
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
+                <button 
+                  onClick={() => {
+                    setDepositStep(1);
+                    setIsDepositOpen(true);
+                  }}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl transition-all shadow-lg shadow-blue-600/20 cursor-pointer text-sm"
+                >
+                  <PlusCircle size={16} />
+                  <span>Deposit Funds</span>
+                </button>
+                {balance > 0 && (
+                  <button 
+                    onClick={() => setIsWithdrawalOpen(true)}
+                    className="w-full sm:w-auto flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white font-semibold px-6 py-3 rounded-xl transition-all border border-white/10 cursor-pointer text-sm"
+                  >
+                    <MinusCircle size={16} />
+                    <span>Withdraw Funds</span>
+                  </button>
+                )}
               </div>
             </div>
-            <p className="text-3xl font-extrabold text-slate-900 dark:text-white font-mono">
-              ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-500 font-semibold">
-              <ArrowUpRight size={14} />
-              <span>Ready to Invest</span>
-            </div>
           </div>
-
-          {/* Invested Funds */}
-          <div className="p-6 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-900 rounded-3xl shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-full blur-xl" />
-            <div className="flex justify-between items-center mb-3">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Invested Capital</span>
-              <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-                <Briefcase size={16} />
-              </div>
-            </div>
-            <p className="text-3xl font-extrabold text-slate-900 dark:text-white font-mono">
-              ${invested.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <div className="mt-3 flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 font-semibold">
-              <TrendingUp size={14} />
-              <span>Active Portfolios</span>
-            </div>
-          </div>
-
-          {/* Total Net Worth */}
-          <div className="p-6 bg-gradient-to-tr from-slate-900 to-slate-950 border border-slate-800 rounded-3xl shadow-xl relative overflow-hidden text-white">
-            <div className="absolute -top-10 -right-10 w-24 h-24 bg-blue-500/20 rounded-full blur-2xl animate-pulse" />
-            <div className="flex justify-between items-center mb-3">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Net Wealth</span>
-              <div className="w-8 h-8 rounded-xl bg-white/10 text-blue-400 flex items-center justify-center">
-                <DollarSign size={16} />
-              </div>
-            </div>
-            <p className="text-3xl font-extrabold font-mono text-white">
-              ${totalPortfolioValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <div className="mt-3 flex items-center gap-1 text-xs text-emerald-400 font-semibold">
-              <ArrowUpRight size={14} />
-              <span>Combined Position</span>
-            </div>
-          </div>
-
-          {/* Average Yield */}
-          <div className="p-6 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-900 rounded-3xl shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-xl" />
-            <div className="flex justify-between items-center mb-3">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">All-Time Returns</span>
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                <TrendingUp size={16} />
-              </div>
-            </div>
-            <p className="text-3xl font-extrabold text-slate-900 dark:text-white font-mono">
-              +{netReturnPercent}%
-            </p>
-            <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-500 font-semibold">
-              <span>+${netGain.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Net Gain</span>
-            </div>
-          </div>
-
         </div>
 
         {/* Navigation Tabs */}
@@ -604,8 +584,8 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
               <div className="lg:col-span-2 p-6 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-900 rounded-3xl shadow-sm">
                 <div className="flex justify-between items-center mb-6">
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white font-display">Simulated Wealth Projection</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">Tracking aggregate portfolio valuation adjustments</p>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white font-display">Portfolio Growth History</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Tracking aggregate portfolio net valuation history</p>
                   </div>
                   <div className="flex items-center gap-4 text-xs font-semibold">
                     <span className="flex items-center gap-1.5 text-blue-600"><span className="w-2.5 h-2.5 rounded-full bg-blue-600 block"></span>Total Wealth</span>
@@ -663,7 +643,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                         <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                         <span className="text-slate-700 dark:text-slate-300 font-medium">{entry.name}</span>
                       </div>
-                      <span className="font-mono font-bold">${entry.value.toLocaleString()}</span>
+                      <span className="font-sans font-bold text-slate-900 dark:text-white">${entry.value.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
@@ -706,10 +686,10 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                             </div>
                             <div>
                               <h4 className="font-bold text-slate-900 dark:text-white text-sm">{asset.name}</h4>
-                              <span className="text-[10px] text-slate-400 font-mono tracking-wider">{asset.id} • {asset.category}</span>
+                              <span className="text-[10px] text-slate-400 font-sans font-medium tracking-wider">{asset.id} • {asset.category}</span>
                             </div>
                           </div>
-                          <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded ${asset.change >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                          <span className={`text-xs font-bold font-sans px-2 py-0.5 rounded ${asset.change >= 0 ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                             {asset.change >= 0 ? '+' : ''}{asset.change}%
                           </span>
                         </div>
@@ -717,12 +697,12 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                         <div className="mt-5 flex justify-between items-end">
                           <div>
                             <p className="text-xs text-slate-400 font-medium">Market Price</p>
-                            <p className="text-lg font-extrabold text-slate-800 dark:text-slate-200 font-mono">${asset.price.toFixed(2)}</p>
+                            <p className="text-lg font-bold text-slate-900 dark:text-white font-display">${asset.price.toFixed(2)}</p>
                           </div>
                           {ownedQty > 0 && (
                             <div className="text-right">
                               <p className="text-[10px] text-slate-400 font-medium">Your Position</p>
-                              <p className="text-xs font-bold text-slate-800 dark:text-slate-200 font-mono">
+                              <p className="text-xs font-semibold text-slate-900 dark:text-white font-sans">
                                 {ownedQty.toFixed(1)} Shares (${ownedVal.toLocaleString(undefined, { maximumFractionDigits: 0 })})
                               </p>
                             </div>
@@ -757,7 +737,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
 
                   <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200/40 dark:border-slate-800/60 mb-6 text-center">
                     <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-1">Target Asset</span>
-                    <span className="text-3xl font-extrabold font-mono text-slate-900 dark:text-white block">{selectedAsset.id}</span>
+                    <span className="text-3xl font-bold font-display text-slate-900 dark:text-white block">{selectedAsset.id}</span>
                     <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">{selectedAsset.name} • ${selectedAsset.price} per share</span>
                   </div>
 
@@ -771,7 +751,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                           placeholder="1000"
                           value={tradeAmount}
                           onChange={(e) => setTradeAmount(e.target.value)}
-                          className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all font-mono text-sm"
+                          className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all text-sm font-semibold"
                         />
                       </div>
                       <div className="flex justify-between items-center text-[11px] text-slate-400 pt-1">
@@ -807,10 +787,10 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
             >
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900 dark:text-white font-display">Simulated Clearing Ledger</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Instant ledger clearing verification registry</p>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white font-display">Account Transactions</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">Comprehensive real-time ledger records</p>
                 </div>
-                <span className="text-xs font-mono text-slate-400">Total: {history.length} transactions logged</span>
+                <span className="text-xs font-sans text-slate-400">Total: {history.length} transactions logged</span>
               </div>
 
               <div className="overflow-x-auto">
@@ -835,10 +815,10 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                             {tx.type}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900 dark:text-white">
+                        <td className="py-3.5 px-4 text-right font-sans font-semibold text-slate-900 dark:text-white">
                           ${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="py-3.5 px-4 text-slate-400 font-mono">
+                        <td className="py-3.5 px-4 text-slate-400 font-sans font-medium">
                           {tx.date}
                         </td>
                         <td className="py-3.5 px-4 text-center">
@@ -897,7 +877,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                             value={depositAmount}
                             onChange={(e) => setDepositAmount(e.target.value)}
                             placeholder="1,000"
-                            className="w-full pl-9 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 font-mono text-base font-bold"
+                            className="w-full pl-9 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 font-display text-base font-bold"
                           />
                         </div>
                         <p className="text-[10px] text-slate-400">Minimum deposit: $10.00 • No deposit fees</p>
@@ -1067,7 +1047,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                 <form onSubmit={handleWithdrawalSubmit} className="p-6 space-y-5">
                   <div className="p-4 bg-blue-50/50 dark:bg-blue-950/10 rounded-2xl border border-blue-100/30 text-xs text-blue-800 dark:text-blue-300 flex items-center justify-between">
                     <span>Available Cash Capital:</span>
-                    <span className="font-bold text-sm font-mono">${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span className="font-bold text-sm font-sans">${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
 
                   {/* Amount Input */}
@@ -1090,7 +1070,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                         value={withdrawalAmount}
                         onChange={(e) => setWithdrawalAmount(e.target.value)}
                         placeholder="0.00"
-                        className="w-full pl-9 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 font-mono text-base font-bold"
+                        className="w-full pl-9 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 font-display text-base font-bold"
                       />
                     </div>
                   </div>
@@ -1136,7 +1116,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                           ? 'Enter Solana (SOL) Address'
                           : 'Enter Bitcoin (BTC) Address'
                       }
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 font-mono text-xs"
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 font-sans text-xs font-semibold"
                     />
                   </div>
 

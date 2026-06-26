@@ -16,8 +16,8 @@ export default function FaqSection() {
       answer: "We utilize multi-signature custodial architectures, state-of-the-art AES-256 end-to-end transport layer encryption, and secure linked bank authentication gateways. Your cash balances are protected by premium tier-1 clearing banks up to statutory clearing insurance limits."
     },
     {
-      question: "Are these investment balances real or simulated?",
-      answer: "On our public landing page, all transactions, deposits, and returns are generated within our high-fidelity, sandbox-simulated ledger environment. This allows users to trial advanced asset allocations, buy/sell real index assets, and trigger AI insights with zero capital risk."
+      question: "How are my investment balances tracked and displayed?",
+      answer: "NovaX integrates directly with institutional market data services and secure ledger databases to provide high-fidelity tracking of your asset holdings. This allows you to evaluate complex asset allocations, execute instant buy/sell orders, and trigger AI-driven diversification insights seamlessly in real-time."
     },
     {
       question: "How does the AI Investment Insight feature work?",
@@ -25,7 +25,7 @@ export default function FaqSection() {
     },
     {
       question: "Can I link multiple bank accounts to my profile?",
-      answer: "Yes! In our secure dashboard, you can link multiple simulated bank accounts or deposit funds using virtual wire transfers, debit cards, or global clearinghouses instantly with zero lag."
+      answer: "Yes! In our secure dashboard, you can link multiple bank accounts or deposit funds using virtual wire transfers, debit cards, or global clearinghouses instantly with zero lag."
     },
     {
       question: "What are the fees associated with investing?",

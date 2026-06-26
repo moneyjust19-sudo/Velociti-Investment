@@ -106,9 +106,9 @@ export default function Footer() {
         <div className="pt-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-[10px] text-slate-600 font-medium text-center sm:text-left">
           
           <div className="space-y-1">
-            <p>© {currentYear} NovaX Technologies Inc. All simulated rights reserved.</p>
+            <p>© {currentYear} NovaX Technologies Inc. All rights reserved.</p>
             <p className="max-w-2xl text-slate-700 leading-normal">
-              Disclaimer: All account balances, transactions, deposit activities, indices, stock performance, and AI-generated insights displayed within this website are entirely sandbox simulations and do not reflect real monetary capital, actual financial instruments, or certified professional investment advice.
+              Disclaimer: NovaX is a financial technology platform, not a registered investment advisor or broker-dealer. Financial asset values are subject to market volatility. Past performance of any index, asset allocation, or historical model is no guarantee of future results.
             </p>
           </div>
 

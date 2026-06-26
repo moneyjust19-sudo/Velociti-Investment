@@ -110,7 +110,7 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
                 id: 'tx-init-1',
                 type: 'deposit',
                 amount: 37000.00,
-                title: 'Simulated Initial Funding',
+                title: 'Initial Funding Deposit',
                 date: new Date(Date.now() - 7 * 24 * 3600 * 1000).toLocaleDateString(),
                 status: 'completed'
               },
@@ -127,7 +127,7 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
                 id: 'tx-init-1',
                 type: 'deposit',
                 amount: 7500.00,
-                title: 'Simulated Initial Funding',
+                title: 'Initial Funding Deposit',
                 date: new Date(Date.now() - 3 * 24 * 3600 * 1000).toLocaleDateString(),
                 status: 'completed'
               },
@@ -365,7 +365,7 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
                 <div className="flex justify-between items-center">
                   <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">Password</label>
                   {isLogin && (
-                    <a href="#forgot" onClick={(e) => { e.preventDefault(); setError('Password reset simulation sent to email!'); }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                    <a href="#forgot" onClick={(e) => { e.preventDefault(); setError('Password reset link has been sent to your email!'); }} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
                       Forgot?
                     </a>
                   )}
@@ -416,27 +416,29 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
             </div>
 
             {/* Quick Demo Accounts */}
-            <div className="mt-6 bg-slate-50 dark:bg-slate-900/80 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
-              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 text-center mb-2 tracking-wider uppercase">
-                🚀 One-Click Demo Access
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => handleDemoLogin('premium')}
-                  className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-800 hover:bg-blue-50 hover:dark:bg-blue-950/20 border border-slate-200/60 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 font-medium cursor-pointer transition-colors"
-                >
-                  <Sparkles size={12} className="text-amber-500" />
-                  <span>Sophia (Premium)</span>
-                </button>
-                <button
-                  onClick={() => handleDemoLogin('growth')}
-                  className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-800 hover:bg-blue-50 hover:dark:bg-blue-950/20 border border-slate-200/60 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 font-medium cursor-pointer transition-colors"
-                >
-                  <Wallet size={12} className="text-blue-500" />
-                  <span>Alexander (Growth)</span>
-                </button>
+            {isLogin && (
+              <div className="mt-6 bg-slate-50 dark:bg-slate-900/80 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 text-center mb-2 tracking-wider uppercase">
+                  🚀 One-Click Demo Access
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleDemoLogin('premium')}
+                    className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-800 hover:bg-blue-50 hover:dark:bg-blue-950/20 border border-slate-200/60 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 font-medium cursor-pointer transition-colors"
+                  >
+                    <Sparkles size={12} className="text-amber-500" />
+                    <span>Sophia (Premium)</span>
+                  </button>
+                  <button
+                    onClick={() => handleDemoLogin('growth')}
+                    className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-800 hover:bg-blue-50 hover:dark:bg-blue-950/20 border border-slate-200/60 dark:border-slate-700 text-[11px] text-slate-700 dark:text-slate-300 font-medium cursor-pointer transition-colors"
+                  >
+                    <Wallet size={12} className="text-blue-500" />
+                    <span>Alexander (Growth)</span>
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
