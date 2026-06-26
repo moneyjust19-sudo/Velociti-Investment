@@ -74,15 +74,83 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
       }
     } else {
       // Simulation mode
-      setTimeout(() => {
+      setIsLoading(true);
+      setTimeout(async () => {
+        const simUserId = 'sim-' + demoEmail.replace(/[^a-zA-Z0-9]/g, '_');
+        try {
+          // Pre-seed premium demo account if profile doesn't exist locally yet
+          const localProfiles = JSON.parse(localStorage.getItem('novax_profiles') || '{}');
+          if (!localProfiles[simUserId]) {
+            localProfiles[simUserId] = {
+              id: simUserId,
+              name: demoName,
+              email: demoEmail,
+              balance: demoType === 'premium' ? 25000.00 : 5000.00,
+              invested: demoType === 'premium' ? 12000.00 : 2500.00,
+              returns: demoType === 'premium' ? 14.85 : 8.20
+            };
+            localStorage.setItem('novax_profiles', JSON.stringify(localProfiles));
+            
+            // Pre-seed some demo holdings
+            const localHoldings = JSON.parse(localStorage.getItem('novax_portfolio_holdings') || '{}');
+            localHoldings[simUserId] = demoType === 'premium' ? {
+              'VOO': 15,
+              'AAPL': 10,
+              'NVDA': 5
+            } : {
+              'VOO': 5,
+              'AAPL': 4
+            };
+            localStorage.setItem('novax_portfolio_holdings', JSON.stringify(localHoldings));
+
+            // Pre-seed some demo transaction history
+            const localTxs = JSON.parse(localStorage.getItem('novax_transactions') || '{}');
+            localTxs[simUserId] = demoType === 'premium' ? [
+              {
+                id: 'tx-init-1',
+                type: 'deposit',
+                amount: 37000.00,
+                title: 'Simulated Initial Funding',
+                date: new Date(Date.now() - 7 * 24 * 3600 * 1000).toLocaleDateString(),
+                status: 'completed'
+              },
+              {
+                id: 'tx-init-2',
+                type: 'investment',
+                amount: 12000.00,
+                title: 'Portfolio Diversification Allocation',
+                date: new Date(Date.now() - 5 * 24 * 3600 * 1000).toLocaleDateString(),
+                status: 'completed'
+              }
+            ] : [
+              {
+                id: 'tx-init-1',
+                type: 'deposit',
+                amount: 7500.00,
+                title: 'Simulated Initial Funding',
+                date: new Date(Date.now() - 3 * 24 * 3600 * 1000).toLocaleDateString(),
+                status: 'completed'
+              },
+              {
+                id: 'tx-init-2',
+                type: 'investment',
+                amount: 2500.00,
+                title: 'Core Portfolio Starter Allocation',
+                date: new Date(Date.now() - 2 * 24 * 3600 * 1000).toLocaleDateString(),
+                status: 'completed'
+              }
+            ];
+            localStorage.setItem('novax_transactions', JSON.stringify(localTxs));
+          }
+        } catch (e) {
+          console.error('Error pre-seeding demo profile:', e);
+        }
+
+        const userData = await loadUserData(simUserId, demoEmail);
         setIsLoading(false);
         setSuccess(true);
         setTimeout(() => {
-          if (demoType === 'premium') {
-            onLoginSuccess('Sophia Bennett', 'sophia.bennett@novax.io');
-          } else {
-            onLoginSuccess('Alexander Wright', 'alex.wright@grow.io');
-          }
+          onLoginSuccess(demoName, demoEmail, userData || undefined);
         }, 1200);
       }, 1000);
     }
@@ -179,11 +247,18 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
       }
     } else {
       // Simulation mode
-      setTimeout(() => {
+      setIsLoading(true);
+      setTimeout(async () => {
+        const simUserId = 'sim-' + email.replace(/[^a-zA-Z0-9]/g, '_');
+        const userData = await loadUserData(simUserId, email);
         setIsLoading(false);
         setSuccess(true);
         setTimeout(() => {
-          onLoginSuccess(isLogin ? (email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1)) : name, email);
+          onLoginSuccess(
+            userData?.name || (isLogin ? (email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1)) : name),
+            email,
+            userData || undefined
+          );
         }, 1200);
       }, 1500);
     }

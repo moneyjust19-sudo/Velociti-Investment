@@ -176,7 +176,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
     
     setHistory(prev => [newTx, ...prev]);
 
-    if (user.id && isSupabaseConfigured) {
+    if (user.id) {
       await saveTransactionInSupabase(user.id, newTx);
       await updateProfileBalanceInSupabase(user.id, newBalance, invested);
     }
@@ -219,7 +219,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
 
     setHistory(prev => [newTx, ...prev]);
 
-    if (user.id && isSupabaseConfigured) {
+    if (user.id) {
       await saveTransactionInSupabase(user.id, newTx);
       await updateProfileBalanceInSupabase(user.id, newBalance, invested);
     }
@@ -263,7 +263,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
       };
       setHistory(prev => [newTx, ...prev]);
 
-      if (user.id && isSupabaseConfigured) {
+      if (user.id) {
         await saveTransactionInSupabase(user.id, newTx);
         await updateProfileBalanceInSupabase(user.id, newBalance, newInvested);
         await updatePortfolioHoldingInSupabase(user.id, selectedAsset.id, updatedQty);
@@ -297,7 +297,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
       };
       setHistory(prev => [newTx, ...prev]);
 
-      if (user.id && isSupabaseConfigured) {
+      if (user.id) {
         await saveTransactionInSupabase(user.id, newTx);
         await updateProfileBalanceInSupabase(user.id, newBalance, newInvested);
         await updatePortfolioHoldingInSupabase(user.id, selectedAsset.id, updatedQty);

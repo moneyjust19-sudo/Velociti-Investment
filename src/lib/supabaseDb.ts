@@ -35,8 +35,42 @@ export async function loadUserData(userId: string, userEmail: string): Promise<U
     portfolio: {}
   };
 
+  const getLocalData = () => {
+    try {
+      const localProfiles = JSON.parse(localStorage.getItem('novax_profiles') || '{}');
+      const localTxs = JSON.parse(localStorage.getItem('novax_transactions') || '{}');
+      const localHoldings = JSON.parse(localStorage.getItem('novax_portfolio_holdings') || '{}');
+
+      if (!localProfiles[userId]) {
+        localProfiles[userId] = {
+          id: userId,
+          name: defaultName,
+          email: userEmail,
+          balance: 0.00,
+          invested: 0.00,
+          returns: 0.00
+        };
+        localStorage.setItem('novax_profiles', JSON.stringify(localProfiles));
+      }
+
+      return {
+        id: userId,
+        name: localProfiles[userId].name,
+        email: localProfiles[userId].email,
+        balance: Number(localProfiles[userId].balance),
+        invested: Number(localProfiles[userId].invested),
+        returns: Number(localProfiles[userId].returns),
+        history: localTxs[userId] || [],
+        portfolio: localHoldings[userId] || {}
+      };
+    } catch (e) {
+      console.error('Failed to load local data fallback:', e);
+      return fallbackUser;
+    }
+  };
+
   if (!isSupabaseConfigured || !supabase) {
-    return fallbackUser;
+    return getLocalData();
   }
 
   try {
@@ -51,7 +85,7 @@ export async function loadUserData(userId: string, userEmail: string): Promise<U
       console.error('Error fetching profile from Supabase:', profileError);
       supabaseErrorTracker.hasTableError = true;
       supabaseErrorTracker.lastErrorMessage = profileError.message;
-      return fallbackUser; // Return simulated so user can still access the app
+      return getLocalData(); // Return simulated so user can still access the app
     }
 
     if (!profile) {
@@ -73,7 +107,7 @@ export async function loadUserData(userId: string, userEmail: string): Promise<U
         console.error('Error creating default profile in Supabase:', insertError);
         supabaseErrorTracker.hasTableError = true;
         supabaseErrorTracker.lastErrorMessage = insertError.message;
-        return fallbackUser;
+        return getLocalData();
       }
       profile = newProfile;
     }
@@ -110,7 +144,7 @@ export async function loadUserData(userId: string, userEmail: string): Promise<U
     }
 
     if (!profile) {
-      return fallbackUser;
+      return getLocalData();
     }
 
     // 2. Fetch transaction history
@@ -156,6 +190,28 @@ export async function loadUserData(userId: string, userEmail: string): Promise<U
       status: t.status as any
     }));
 
+    // Sync to local storage
+    try {
+      const localProfiles = JSON.parse(localStorage.getItem('novax_profiles') || '{}');
+      localProfiles[userId] = {
+        id: userId,
+        name: profile.name,
+        email: profile.email,
+        balance: Number(profile.balance),
+        invested: Number(profile.invested),
+        returns: Number(profile.returns)
+      };
+      localStorage.setItem('novax_profiles', JSON.stringify(localProfiles));
+
+      const localTxs = JSON.parse(localStorage.getItem('novax_transactions') || '{}');
+      localTxs[userId] = mappedTxs;
+      localStorage.setItem('novax_transactions', JSON.stringify(localTxs));
+
+      const localHoldings = JSON.parse(localStorage.getItem('novax_portfolio_holdings') || '{}');
+      localHoldings[userId] = portfolioMap;
+      localStorage.setItem('novax_portfolio_holdings', JSON.stringify(localHoldings));
+    } catch (e) {}
+
     return {
       id: userId,
       name: profile.name,
@@ -171,12 +227,26 @@ export async function loadUserData(userId: string, userEmail: string): Promise<U
     console.error('Unexpected error in loadUserData:', err);
     supabaseErrorTracker.hasTableError = true;
     supabaseErrorTracker.lastErrorMessage = err?.message || String(err);
-    return fallbackUser;
+    return getLocalData();
   }
 }
 
 // Save transaction
 export async function saveTransactionInSupabase(userId: string, tx: Transaction) {
+  // Always update locally first
+  try {
+    const localTxs = JSON.parse(localStorage.getItem('novax_transactions') || '{}');
+    if (!localTxs[userId]) {
+      localTxs[userId] = [];
+    }
+    if (!localTxs[userId].some((t: Transaction) => t.id === tx.id)) {
+      localTxs[userId].unshift(tx);
+      localStorage.setItem('novax_transactions', JSON.stringify(localTxs));
+    }
+  } catch (e) {
+    console.error('Failed to save transaction locally:', e);
+  }
+
   if (!isSupabaseConfigured || !supabase) return;
   try {
     const { error } = await supabase.from('transactions').insert({
@@ -202,6 +272,27 @@ export async function saveTransactionInSupabase(userId: string, tx: Transaction)
 
 // Update profile balance
 export async function updateProfileBalanceInSupabase(userId: string, balance: number, invested: number) {
+  // Always update locally first
+  try {
+    const localProfiles = JSON.parse(localStorage.getItem('novax_profiles') || '{}');
+    if (!localProfiles[userId]) {
+      localProfiles[userId] = {
+        id: userId,
+        name: userId.startsWith('sim-') ? userId.split('sim-')[1] : 'User',
+        email: userId.startsWith('sim-') ? userId.split('sim-')[1] : '',
+        balance,
+        invested,
+        returns: 0.00
+      };
+    } else {
+      localProfiles[userId].balance = balance;
+      localProfiles[userId].invested = invested;
+    }
+    localStorage.setItem('novax_profiles', JSON.stringify(localProfiles));
+  } catch (e) {
+    console.error('Failed to update balance locally:', e);
+  }
+
   if (!isSupabaseConfigured || !supabase) return;
   try {
     const { error } = await supabase
@@ -222,6 +313,18 @@ export async function updateProfileBalanceInSupabase(userId: string, balance: nu
 
 // Update portfolio holdings
 export async function updatePortfolioHoldingInSupabase(userId: string, assetId: string, quantity: number) {
+  // Always update locally first
+  try {
+    const localHoldings = JSON.parse(localStorage.getItem('novax_portfolio_holdings') || '{}');
+    if (!localHoldings[userId]) {
+      localHoldings[userId] = {};
+    }
+    localHoldings[userId][assetId] = quantity;
+    localStorage.setItem('novax_portfolio_holdings', JSON.stringify(localHoldings));
+  } catch (e) {
+    console.error('Failed to update portfolio holdings locally:', e);
+  }
+
   if (!isSupabaseConfigured || !supabase) return;
   try {
     const { error } = await supabase
