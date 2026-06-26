@@ -82,13 +82,9 @@ export default function HowItWorks() {
               </p>
 
               <div className="flex gap-2 mt-5">
-                <button className="flex-1 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/20 text-blue-600 dark:text-blue-400 text-xs font-bold hover:bg-blue-100 transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
-                  <MessageSquare size={13} />
-                  <span>Live Chat</span>
-                </button>
-                <button className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
+                <button className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer">
                   <Mail size={13} />
-                  <span>Book Call</span>
+                  <span>Book Call with Sophia</span>
                 </button>
               </div>
             </motion.div>

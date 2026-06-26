@@ -1,11 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { isSupabaseConfigured } from '../lib/supabase';
+import { 
+  saveTransactionInSupabase, 
+  updateProfileBalanceInSupabase, 
+  updatePortfolioHoldingInSupabase,
+  supabaseErrorTracker
+} from '../lib/supabaseDb';
 import { 
   TrendingUp, TrendingDown, DollarSign, Wallet, ArrowUpRight, 
   ArrowDownLeft, LogOut, Search, PlusCircle, MinusCircle, 
   User, Bell, FileText, ChevronRight, BarChart3, LineChart, 
   Sparkles, RefreshCw, Layers, ShieldCheck, ArrowRightLeft,
-  Briefcase, Landmark, PieChart, Info, HelpCircle
+  Briefcase, Landmark, PieChart, Info, HelpCircle, Copy, Check, CheckCircle2
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -29,25 +36,95 @@ const STOCK_ASSETS = [
   { id: 'GLD', name: 'SPDR Gold Trust', category: 'Commodities', price: 215.10, change: 0.15, logo: '🪙' },
 ];
 
+const SCHEMA_SQL = `-- Create Profiles table if not exists
+create table if not exists public.profiles (
+  id uuid references auth.users on delete cascade not null primary key,
+  name text,
+  email text,
+  balance numeric default 0.00,
+  invested numeric default 0.00,
+  returns numeric default 0.00,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS on Profiles
+alter table public.profiles enable row level security;
+
+-- Drop existing policies if they exist before creating to avoid duplicate errors
+drop policy if exists "Allow public read profile" on public.profiles;
+create policy "Allow public read profile" on public.profiles for select using (true);
+
+drop policy if exists "Allow users to update own profile" on public.profiles;
+create policy "Allow users to update own profile" on public.profiles for update using (auth.uid() = id);
+
+drop policy if exists "Allow users to insert own profile" on public.profiles;
+create policy "Allow users to insert own profile" on public.profiles for insert with check (auth.uid() = id);
+
+-- Create Transactions table if not exists
+create table if not exists public.transactions (
+  id text not null primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  type text not null,
+  amount numeric not null,
+  title text not null,
+  date text not null,
+  status text not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- Enable RLS on Transactions
+alter table public.transactions enable row level security;
+
+drop policy if exists "Allow users to view own transactions" on public.transactions;
+create policy "Allow users to view own transactions" on public.transactions for select using (auth.uid() = user_id);
+
+drop policy if exists "Allow users to insert own transactions" on public.transactions;
+create policy "Allow users to insert own transactions" on public.transactions for insert with check (auth.uid() = user_id);
+
+-- Create Portfolio Holdings table if not exists
+create table if not exists public.portfolio_holdings (
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  asset_id text not null,
+  quantity numeric not null,
+  primary key (user_id, asset_id)
+);
+
+-- Enable RLS on Portfolio Holdings
+alter table public.portfolio_holdings enable row level security;
+
+drop policy if exists "Allow users to view own portfolio" on public.portfolio_holdings;
+create policy "Allow users to view own portfolio" on public.portfolio_holdings for select using (auth.uid() = user_id);
+
+drop policy if exists "Allow users to upsert own portfolio" on public.portfolio_holdings;
+create policy "Allow users to upsert own portfolio" on public.portfolio_holdings for all using (auth.uid() = user_id);`;
+
 export default function DashboardSimulation({ user, onLogout, isDark, onToggleTheme }: DashboardSimulationProps) {
+  const [showSqlSetup, setShowSqlSetup] = useState(supabaseErrorTracker.hasTableError);
+  const [copiedSql, setCopiedSql] = useState(false);
   const [balance, setBalance] = useState(user.balance);
   const [invested, setInvested] = useState(user.invested);
   const [history, setHistory] = useState<Transaction[]>(user.history);
   const [selectedAsset, setSelectedAsset] = useState(STOCK_ASSETS[3]); // VOO default
   const [tradeAmount, setTradeAmount] = useState('1000');
   const [tradeType, setTradeType] = useState<'buy' | 'sell'>('buy');
-  const [activeTab, setActiveTab] = useState<'overview' | 'assets' | 'insights' | 'history'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'assets' | 'history'>('overview');
   
   // Custom user owned quantities
-  const [portfolio, setPortfolio] = useState<{ [key: string]: number }>({
-    'VOO': 15,
-    'AAPL': 10,
-    'NVDA': 5,
+  const [portfolio, setPortfolio] = useState<{ [key: string]: number }>(() => {
+    return user.portfolio || {};
   });
 
-  // AI Insights State
-  const [aiInsight, setAiInsight] = useState<string>('Welcome to your premium portfolio assistant. Click the button below to generate a deep strategic review of your current holdings based on market fluctuations.');
-  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+  // Deposit & Withdrawal States
+  const [isDepositOpen, setIsDepositOpen] = useState(false);
+  const [depositStep, setDepositStep] = useState<1 | 2>(1);
+  const [depositAmount, setDepositAmount] = useState('1000');
+  const [depositNetwork, setDepositNetwork] = useState<'solana' | 'bitcoin'>('solana');
+  const [copiedAddress, setCopiedAddress] = useState(false);
+
+  const [isWithdrawalOpen, setIsWithdrawalOpen] = useState(false);
+  const [withdrawalAmount, setWithdrawalAmount] = useState('');
+  const [withdrawalNetwork, setWithdrawalNetwork] = useState<'solana' | 'bitcoin'>('solana');
+  const [withdrawalAddress, setWithdrawalAddress] = useState('');
 
   // Growth Data Chart
   const [chartPeriod, setChartPeriod] = useState<'1W' | '1M' | '1Y' | 'ALL'>('1M');
@@ -77,23 +154,84 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
     setChartData(data);
   }, [chartPeriod, balance, invested]);
 
-  // Handle Simulated Quick Deposit
-  const handleDeposit = () => {
-    const amount = 5000;
-    setBalance(prev => prev + amount);
+  // Handle Real Deposit Completion
+  const handleCompleteDeposit = async () => {
+    const amountNum = parseFloat(depositAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      alert('Please enter a valid amount.');
+      return;
+    }
+
+    const newBalance = balance + amountNum;
+    setBalance(newBalance);
+    
     const newTx: Transaction = {
-      id: 'tx-' + Math.random().toString(36).substr(2, 9),
+      id: 'tx-' + Math.random().toString(36).substring(2, 11),
       type: 'deposit',
-      amount,
-      title: 'Linked Bank Transfer',
+      amount: amountNum,
+      title: `${depositNetwork === 'solana' ? 'Solana' : 'Bitcoin'} Crypto Deposit`,
       date: new Date().toLocaleDateString(),
       status: 'completed'
     };
+    
     setHistory(prev => [newTx, ...prev]);
+
+    if (user.id && isSupabaseConfigured) {
+      await saveTransactionInSupabase(user.id, newTx);
+      await updateProfileBalanceInSupabase(user.id, newBalance, invested);
+    }
+
+    setIsDepositOpen(false);
+    setDepositStep(1);
+    alert(`Successfully deposited $${amountNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} via ${depositNetwork === 'solana' ? 'Solana' : 'Bitcoin'}!`);
+  };
+
+  // Handle Real Withdrawal Request
+  const handleWithdrawalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountNum = parseFloat(withdrawalAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      alert('Please enter a valid withdrawal amount.');
+      return;
+    }
+
+    if (amountNum > balance) {
+      alert('Insufficient balance for this withdrawal.');
+      return;
+    }
+
+    if (!withdrawalAddress.trim()) {
+      alert('Please enter a destination wallet address.');
+      return;
+    }
+
+    const newBalance = balance - amountNum;
+    setBalance(newBalance);
+
+    const newTx: Transaction = {
+      id: 'tx-' + Math.random().toString(36).substring(2, 11),
+      type: 'withdrawal',
+      amount: amountNum,
+      title: `${withdrawalNetwork === 'solana' ? 'Solana' : 'Bitcoin'} Crypto Withdrawal`,
+      date: new Date().toLocaleDateString(),
+      status: 'completed'
+    };
+
+    setHistory(prev => [newTx, ...prev]);
+
+    if (user.id && isSupabaseConfigured) {
+      await saveTransactionInSupabase(user.id, newTx);
+      await updateProfileBalanceInSupabase(user.id, newBalance, invested);
+    }
+
+    setIsWithdrawalOpen(false);
+    setWithdrawalAmount('');
+    setWithdrawalAddress('');
+    alert(`Successfully withdrew $${amountNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}!`);
   };
 
   // Handle Trade Execution
-  const handleTrade = (e: React.FormEvent) => {
+  const handleTrade = async (e: React.FormEvent) => {
     e.preventDefault();
     const amountNum = parseFloat(tradeAmount);
     if (isNaN(amountNum) || amountNum <= 0) return;
@@ -103,13 +241,16 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
         alert('Insufficient cash balance to execute this trade.');
         return;
       }
-      setBalance(prev => prev - amountNum);
-      setInvested(prev => prev + amountNum);
+      const newBalance = balance - amountNum;
+      const newInvested = invested + amountNum;
+      setBalance(newBalance);
+      setInvested(newInvested);
       
       const qty = amountNum / selectedAsset.price;
+      const updatedQty = (portfolio[selectedAsset.id] || 0) + qty;
       setPortfolio(prev => ({
         ...prev,
-        [selectedAsset.id]: (prev[selectedAsset.id] || 0) + qty
+        [selectedAsset.id]: updatedQty
       }));
 
       const newTx: Transaction = {
@@ -121,6 +262,12 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
         status: 'completed'
       };
       setHistory(prev => [newTx, ...prev]);
+
+      if (user.id && isSupabaseConfigured) {
+        await saveTransactionInSupabase(user.id, newTx);
+        await updateProfileBalanceInSupabase(user.id, newBalance, newInvested);
+        await updatePortfolioHoldingInSupabase(user.id, selectedAsset.id, updatedQty);
+      }
     } else {
       const ownedQty = portfolio[selectedAsset.id] || 0;
       const ownedValue = ownedQty * selectedAsset.price;
@@ -128,13 +275,16 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
         alert('You do not own enough of this asset to sell this amount.');
         return;
       }
-      setBalance(prev => prev + amountNum);
-      setInvested(prev => prev - amountNum);
+      const newBalance = balance + amountNum;
+      const newInvested = invested - amountNum;
+      setBalance(newBalance);
+      setInvested(newInvested);
 
       const qtySold = amountNum / selectedAsset.price;
+      const updatedQty = Math.max(0, ownedQty - qtySold);
       setPortfolio(prev => ({
         ...prev,
-        [selectedAsset.id]: Math.max(0, ownedQty - qtySold)
+        [selectedAsset.id]: updatedQty
       }));
 
       const newTx: Transaction = {
@@ -146,29 +296,18 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
         status: 'completed'
       };
       setHistory(prev => [newTx, ...prev]);
+
+      if (user.id && isSupabaseConfigured) {
+        await saveTransactionInSupabase(user.id, newTx);
+        await updateProfileBalanceInSupabase(user.id, newBalance, newInvested);
+        await updatePortfolioHoldingInSupabase(user.id, selectedAsset.id, updatedQty);
+      }
     }
   };
 
-  // Simulate AI insight generation
-  const generateInsights = () => {
-    setIsGeneratingAi(true);
-    setTimeout(() => {
-      setIsGeneratingAi(false);
-      const totalWealth = balance + invested;
-      const stockWeight = ((portfolio['AAPL'] || 0) * 185.4 + (portfolio['NVDA'] || 0) * 475.2) / (invested || 1);
-      
-      let insightText = '';
-      if (stockWeight > 0.4) {
-        insightText = `📈 Strategic Review for ${user.name}: Your portfolio shows high concentration in tech-heavy mega-caps like NVDA and AAPL (approximately ${(stockWeight * 100).toFixed(0)}% of investments). While tech sectors are rallying due to high computing demand, we recommend balancing your risk by accumulating more S&P 500 ETF (VOO) or allocating 5% into gold (GLD) to protect against interest rate fluctuations. Your current liquid reserve of $${balance.toLocaleString()} is optimal.`;
-      } else {
-        insightText = `🛡️ Strategic Review for ${user.name}: Outstanding diversification! Your core holdings in index ETFs like VOO provide a highly resilient foundation for financial growth. Since you have $${balance.toLocaleString()} in liquid cash, you might consider starting a Dollar-Cost-Averaging (DCA) strategy to buy small shares of high-conviction growth equities (e.g. NVDA) on pullbacks, enhancing long-term capital appreciation.`;
-      }
-      setAiInsight(insightText);
-    }, 1500);
-  };
-
   const totalPortfolioValue = balance + invested;
-  const netReturnPercent = 14.85;
+  const netReturnPercent = user.returns || 0.00;
+  const netGain = (invested * (netReturnPercent / 100)) || 0.00;
 
   // Pie chart format
   const pieData = Object.keys(portfolio).map(key => {
@@ -241,6 +380,56 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
       {/* Main Container */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
+        {/* Supabase SQL Setup Helper */}
+        <AnimatePresence>
+          {showSqlSetup && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mb-8 p-6 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-3xl relative overflow-hidden text-amber-900 dark:text-amber-200 shadow-sm"
+            >
+              <div className="flex flex-col sm:flex-row gap-4 items-start justify-between">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300">
+                      <HelpCircle size={18} />
+                    </span>
+                    <h3 className="font-bold text-base">Setup Your Supabase Database Tables</h3>
+                  </div>
+                  <p className="text-xs text-amber-800 dark:text-amber-300 max-w-3xl leading-relaxed">
+                    We detected that your Supabase database doesn't have the required tables yet. We have successfully launched a **secure Local-first simulation mode** so you can continue using all aspects of NovaX immediately! To connect your real data, copy and run the SQL below in your **Supabase SQL Editor**.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 self-end sm:self-start">
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(SCHEMA_SQL);
+                      setCopiedSql(true);
+                      setTimeout(() => setCopiedSql(false), 2000);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-sm transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    {copiedSql ? '✓ Copied SQL!' : 'Copy Schema SQL'}
+                  </button>
+                  <button
+                    onClick={() => setShowSqlSetup(false)}
+                    className="px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 text-xs font-semibold transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    Dismiss Warning
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-4 p-4 bg-slate-900 dark:bg-black rounded-2xl border border-slate-800 text-left overflow-x-auto">
+                <pre className="text-[10px] leading-relaxed font-mono text-emerald-400 select-all max-h-48 overflow-y-auto">
+                  {SCHEMA_SQL}
+                </pre>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Dynamic Welcoming Greeting & Quick Deposit */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
@@ -253,12 +442,24 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
           </div>
           <div className="flex items-center gap-3">
             <button 
-              onClick={handleDeposit}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2.5 rounded-xl transition-all shadow-md shadow-blue-500/10 cursor-pointer text-sm"
+              onClick={() => {
+                setDepositStep(1);
+                setIsDepositOpen(true);
+              }}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium px-4.5 py-2.5 rounded-xl transition-all shadow-md shadow-blue-500/10 cursor-pointer text-sm font-semibold"
             >
               <PlusCircle size={16} />
-              <span>Simulate $5,000 Deposit</span>
+              <span>Deposit</span>
             </button>
+            {balance > 0 && (
+              <button 
+                onClick={() => setIsWithdrawalOpen(true)}
+                className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold px-4.5 py-2.5 rounded-xl transition-all cursor-pointer text-sm border border-slate-200/50 dark:border-slate-700/50"
+              >
+                <MinusCircle size={16} />
+                <span>Withdrawal</span>
+              </button>
+            )}
             <div className="flex rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-0.5">
               <button 
                 onClick={() => setChartPeriod('1W')} 
@@ -352,7 +553,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
               +{netReturnPercent}%
             </p>
             <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-500 font-semibold">
-              <span>+$14,242.45 Net Gain</span>
+              <span>+${netGain.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Net Gain</span>
             </div>
           </div>
 
@@ -376,15 +577,6 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
             <div className="flex items-center gap-2">
               <Briefcase size={16} />
               <span>Buy / Sell Assets</span>
-            </div>
-          </button>
-          <button 
-            onClick={() => setActiveTab('insights')}
-            className={`pb-4 px-6 text-sm font-semibold transition-all border-b-2 whitespace-nowrap cursor-pointer ${activeTab === 'insights' ? 'border-blue-600 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-          >
-            <div className="flex items-center gap-2">
-              <Sparkles size={16} className="text-amber-500" />
-              <span>AI Investment Insights</span>
             </div>
           </button>
           <button 
@@ -605,61 +797,6 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
             </motion.div>
           )}
 
-          {activeTab === 'insights' && (
-            <motion.div 
-              key="insights"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="p-8 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-900 rounded-3xl shadow-sm relative overflow-hidden"
-            >
-              {/* Decorative glows */}
-              <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl" />
-              <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl" />
-
-              <div className="max-w-2xl mx-auto text-center space-y-6">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 text-xs font-semibold">
-                  <Sparkles size={14} className="animate-spin" style={{ animationDuration: '8s' }} />
-                  <span>NovaX AI Advisor • Active Analysis</span>
-                </div>
-
-                <h2 className="text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-display">
-                  Strategic Artificial Intelligence Insight Engine
-                </h2>
-                <p className="text-slate-500 dark:text-slate-400 text-sm">
-                  Our advanced neural model analyzes your simulated asset concentrations, cash reserves, and market volatility indexes to generate bespoke diversification warnings and target opportunities.
-                </p>
-
-                <div className="p-6 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800 text-left relative overflow-hidden">
-                  <div className="absolute top-4 right-4 text-xs text-slate-300 dark:text-slate-700 font-mono">
-                    MODEL: NOVAX-AI-PRO
-                  </div>
-                  <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
-                    {aiInsight}
-                  </p>
-                </div>
-
-                <button
-                  onClick={generateInsights}
-                  disabled={isGeneratingAi}
-                  className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-medium py-3 px-8 rounded-xl transition-all shadow-lg shadow-amber-500/10 flex items-center justify-center gap-2 mx-auto cursor-pointer disabled:opacity-50"
-                >
-                  {isGeneratingAi ? (
-                    <>
-                      <RefreshCw size={16} className="animate-spin" />
-                      <span>Synthesizing Holdings Analysis...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={16} />
-                      <span>Generate Fresh Strategic Advice</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          )}
-
           {activeTab === 'history' && (
             <motion.div 
               key="history"
@@ -716,6 +853,316 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                 </table>
               </div>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Deposit Modal */}
+        <AnimatePresence>
+          {isDepositOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl shadow-xl overflow-hidden"
+              >
+                {/* Modal Header */}
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white font-display">Deposit Funds</h3>
+                    <p className="text-xs text-slate-400">Add secure trading capital to your balance</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsDepositOpen(false);
+                      setDepositStep(1);
+                    }}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <div className="p-6 space-y-6">
+                  {depositStep === 1 ? (
+                    <div className="space-y-6">
+                      {/* Amount Input */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Enter Deposit Amount (USD)</label>
+                        <div className="relative">
+                          <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400 dark:text-slate-500 font-bold text-lg">$</span>
+                          <input
+                            type="number"
+                            value={depositAmount}
+                            onChange={(e) => setDepositAmount(e.target.value)}
+                            placeholder="1,000"
+                            className="w-full pl-9 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 font-mono text-base font-bold"
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400">Minimum deposit: $10.00 • No deposit fees</p>
+                      </div>
+
+                      {/* Network selection */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Select Blockchain Network</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setDepositNetwork('solana')}
+                            className={`p-4 rounded-2xl border text-left transition-all relative cursor-pointer flex flex-col items-start gap-1 ${
+                              depositNetwork === 'solana'
+                                ? 'border-purple-500 bg-purple-50/10 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 shadow-sm'
+                                : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850'
+                            }`}
+                          >
+                            <span className="text-xl">☀️</span>
+                            <span className="text-sm font-bold mt-1">Solana Network</span>
+                            <span className="text-[10px] text-slate-400 font-medium">Instant • Low Fees</span>
+                            {depositNetwork === 'solana' && (
+                              <span className="absolute top-3 right-3 w-2 h-2 rounded-full bg-purple-500"></span>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setDepositNetwork('bitcoin')}
+                            className={`p-4 rounded-2xl border text-left transition-all relative cursor-pointer flex flex-col items-start gap-1 ${
+                              depositNetwork === 'bitcoin'
+                                ? 'border-amber-500 bg-amber-50/10 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400 shadow-sm'
+                                : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-850'
+                            }`}
+                          >
+                            <span className="text-xl">₿</span>
+                            <span className="text-sm font-bold mt-1">Bitcoin Network</span>
+                            <span className="text-[10px] text-slate-400 font-medium">10-30 min • High Security</span>
+                            {depositNetwork === 'bitcoin' && (
+                              <span className="absolute top-3 right-3 w-2 h-2 rounded-full bg-amber-500"></span>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Continue Button */}
+                      <button
+                        onClick={() => {
+                          const amt = parseFloat(depositAmount);
+                          if (isNaN(amt) || amt <= 0) {
+                            alert('Please enter a valid amount to deposit.');
+                            return;
+                          }
+                          setDepositStep(2);
+                        }}
+                        className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-sm shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 transition-all cursor-pointer"
+                      >
+                        Continue to Wallet Address
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Network indicator */}
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Deposit Method</span>
+                          <span className="text-sm font-extrabold text-slate-800 dark:text-slate-200 block mt-0.5">
+                            {depositNetwork === 'solana' ? 'Solana (SOL)' : 'Bitcoin (BTC)'} Network
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Amount To Credited</span>
+                          <span className="text-sm font-extrabold text-blue-600 dark:text-blue-400 block mt-0.5">
+                            ${parseFloat(depositAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Wallet Address Copy Block */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Destination Wallet Address</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={
+                              depositNetwork === 'solana'
+                                ? '5gKq11bJRA4FHzX4ah4MEhwprRFnoczpUbZpX55F9W8a'
+                                : 'bc1qkky0m5ed9v4sjf29thss9hd3dt9tpl3m97w6fy'
+                            }
+                            className="flex-1 bg-slate-50 dark:bg-slate-950/40 text-slate-700 dark:text-slate-300 font-mono text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-800 select-all focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const addr = depositNetwork === 'solana'
+                                ? '5gKq11bJRA4FHzX4ah4MEhwprRFnoczpUbZpX55F9W8a'
+                                : 'bc1qkky0m5ed9v4sjf29thss9hd3dt9tpl3m97w6fy';
+                              navigator.clipboard.writeText(addr);
+                              setCopiedAddress(true);
+                              setTimeout(() => setCopiedAddress(false), 2500);
+                            }}
+                            className="px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-200 transition-colors flex items-center justify-center cursor-pointer border border-slate-200 dark:border-slate-700"
+                          >
+                            {copiedAddress ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-red-500 font-medium">
+                          ⚠️ Make sure to send ONLY {depositNetwork === 'solana' ? 'SOL/USDC' : 'BTC'} to this network. Sending other tokens will result in permanent fund loss.
+                        </p>
+                      </div>
+
+                      {/* Complete & Back Actions */}
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setDepositStep(1)}
+                          className="flex-1 py-3 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold text-sm rounded-xl hover:bg-slate-50 dark:hover:bg-slate-850 transition-all cursor-pointer text-center"
+                        >
+                          Back
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCompleteDeposit}
+                          className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 transition-all cursor-pointer text-center"
+                        >
+                          Complete Transaction
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Withdrawal Modal */}
+        <AnimatePresence>
+          {isWithdrawalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl shadow-xl overflow-hidden"
+              >
+                {/* Modal Header */}
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white font-display">Withdraw Capital</h3>
+                    <p className="text-xs text-slate-400">Transfer funds out of your active balance</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsWithdrawalOpen(false);
+                      setWithdrawalAmount('');
+                      setWithdrawalAddress('');
+                    }}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Modal Body */}
+                <form onSubmit={handleWithdrawalSubmit} className="p-6 space-y-5">
+                  <div className="p-4 bg-blue-50/50 dark:bg-blue-950/10 rounded-2xl border border-blue-100/30 text-xs text-blue-800 dark:text-blue-300 flex items-center justify-between">
+                    <span>Available Cash Capital:</span>
+                    <span className="font-bold text-sm font-mono">${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </div>
+
+                  {/* Amount Input */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Withdrawal Amount (USD)</label>
+                      <button
+                        type="button"
+                        onClick={() => setWithdrawalAmount(balance.toString())}
+                        className="text-[10px] font-extrabold text-blue-600 dark:text-blue-400 uppercase tracking-wider hover:underline cursor-pointer"
+                      >
+                        Use Max Available
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-slate-400 dark:text-slate-500 font-bold text-lg">$</span>
+                      <input
+                        type="number"
+                        max={balance}
+                        value={withdrawalAmount}
+                        onChange={(e) => setWithdrawalAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-9 pr-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 font-mono text-base font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Network Choice */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Destination Network</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setWithdrawalNetwork('solana')}
+                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                          withdrawalNetwork === 'solana'
+                            ? 'border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                            : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
+                        }`}
+                      >
+                        ☀️ Solana Network
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setWithdrawalNetwork('bitcoin')}
+                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                          withdrawalNetwork === 'bitcoin'
+                            ? 'border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                            : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
+                        }`}
+                      >
+                        ₿ Bitcoin Network
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Target Address Input */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Destination Wallet Address</label>
+                    <input
+                      type="text"
+                      value={withdrawalAddress}
+                      onChange={(e) => setWithdrawalAddress(e.target.value)}
+                      placeholder={
+                        withdrawalNetwork === 'solana'
+                          ? 'Enter Solana (SOL) Address'
+                          : 'Enter Bitcoin (BTC) Address'
+                      }
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 font-mono text-xs"
+                    />
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsWithdrawalOpen(false);
+                        setWithdrawalAmount('');
+                        setWithdrawalAddress('');
+                      }}
+                      className="flex-1 py-3 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold text-sm rounded-xl hover:bg-slate-50 dark:hover:bg-slate-850 transition-all cursor-pointer text-center"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 transition-all cursor-pointer text-center"
+                    >
+                      Withdraw Capital
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>
 

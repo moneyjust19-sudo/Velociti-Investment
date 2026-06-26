@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, Lock, User, ArrowRight, Wallet, CheckCircle, Shield, Sparkles } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { loadUserData } from '../lib/supabaseDb';
 
 interface LoginPageProps {
-  onLoginSuccess: (name: string, email: string) => void;
+  onLoginSuccess: (name: string, email: string, customUser?: any) => void;
   onClose?: () => void;
   isModal?: boolean;
 }
@@ -17,23 +19,76 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  const handleDemoLogin = (demoType: 'premium' | 'growth') => {
+  const handleDemoLogin = async (demoType: 'premium' | 'growth') => {
     setIsLoading(true);
     setError('');
-    setTimeout(() => {
-      setIsLoading(false);
-      setSuccess(true);
-      setTimeout(() => {
-        if (demoType === 'premium') {
-          onLoginSuccess('Sophia Bennett', 'sophia.bennett@novax.io');
-        } else {
-          onLoginSuccess('Alexander Wright', 'alex.wright@grow.io');
+    
+    const demoEmail = demoType === 'premium' ? 'sophia.bennett@novax.io' : 'alexander.wright@grow.io';
+    const demoName = demoType === 'premium' ? 'Sophia Bennett' : 'Alexander Wright';
+    const demoPassword = 'DemoPassword123!';
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        // Attempt to sign in
+        let { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: demoEmail,
+          password: demoPassword
+        });
+
+        if (signInError) {
+          // If sign-in fails because user does not exist, attempt to sign up automatically
+          if (signInError.message.includes('Invalid login credentials') || signInError.status === 400) {
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+              email: demoEmail,
+              password: demoPassword,
+              options: { data: { name: demoName } }
+            });
+
+            if (signUpError) {
+              throw signUpError;
+            }
+            data = signUpData;
+          } else {
+            throw signInError;
+          }
         }
-      }, 1200);
-    }, 1000);
+
+        if (data && data.user) {
+          // Load User Data from Supabase
+          const userData = await loadUserData(data.user.id, demoEmail);
+          if (userData) {
+            userData.id = data.user.id;
+            setIsLoading(false);
+            setSuccess(true);
+            setTimeout(() => {
+              onLoginSuccess(userData.name, userData.email, userData);
+            }, 1200);
+            return;
+          }
+        }
+        throw new Error('Failed to retrieve user profile from Supabase');
+      } catch (err: any) {
+        console.error('Demo authentication error via Supabase:', err);
+        setError(`Database Demo Error: ${err.message || err}`);
+        setIsLoading(false);
+      }
+    } else {
+      // Simulation mode
+      setTimeout(() => {
+        setIsLoading(false);
+        setSuccess(true);
+        setTimeout(() => {
+          if (demoType === 'premium') {
+            onLoginSuccess('Sophia Bennett', 'sophia.bennett@novax.io');
+          } else {
+            onLoginSuccess('Alexander Wright', 'alex.wright@grow.io');
+          }
+        }, 1200);
+      }, 1000);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password || (!isLogin && !name)) {
       setError('Please fill in all fields');
@@ -51,13 +106,87 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
     setIsLoading(true);
     setError('');
 
-    setTimeout(() => {
-      setIsLoading(false);
-      setSuccess(true);
+    if (isSupabaseConfigured && supabase) {
+      try {
+        if (isLogin) {
+          // Supabase Sign In
+          const { data, error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password
+          });
+
+          if (signInError) throw signInError;
+
+          if (data && data.user) {
+            const userData = await loadUserData(data.user.id, email);
+            if (userData) {
+              userData.id = data.user.id;
+              setIsLoading(false);
+              setSuccess(true);
+              setTimeout(() => {
+                onLoginSuccess(userData.name, userData.email, userData);
+              }, 1200);
+              return;
+            }
+          }
+          throw new Error('Failed to load user profile');
+        } else {
+          // Supabase Sign Up
+          const { data, error: signUpError } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+              data: {
+                name
+              }
+            }
+          });
+
+          if (signUpError) throw signUpError;
+
+          if (data && data.user) {
+            // Also insert profile explicitly (just in case)
+            const { error: profileError } = await supabase.from('profiles').upsert({
+              id: data.user.id,
+              name,
+              email,
+              balance: 0.00,
+              invested: 0.00,
+              returns: 0.00
+            });
+
+            if (profileError) {
+              console.error('Error creating user profile in DB:', profileError);
+            }
+
+            const userData = await loadUserData(data.user.id, email);
+            if (userData) {
+              userData.id = data.user.id;
+              setIsLoading(false);
+              setSuccess(true);
+              setTimeout(() => {
+                onLoginSuccess(userData.name, userData.email, userData);
+              }, 1200);
+              return;
+            }
+          }
+          throw new Error('Sign up completed but profile could not be initialized.');
+        }
+      } catch (err: any) {
+        console.error('Authentication error:', err);
+        setError(err.message || 'An error occurred during authentication.');
+        setIsLoading(false);
+      }
+    } else {
+      // Simulation mode
       setTimeout(() => {
-        onLoginSuccess(isLogin ? (email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1)) : name, email);
-      }, 1200);
-    }, 1500);
+        setIsLoading(false);
+        setSuccess(true);
+        setTimeout(() => {
+          onLoginSuccess(isLogin ? (email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1)) : name, email);
+        }, 1200);
+      }, 1500);
+    }
   };
 
   const formContent = (

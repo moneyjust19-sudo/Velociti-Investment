@@ -1,10 +1,12 @@
 export interface User {
+  id?: string;
   email: string;
   name: string;
   balance: number;
   invested: number;
   returns: number;
   history: Transaction[];
+  portfolio?: { [key: string]: number };
 }
 
 export interface Transaction {

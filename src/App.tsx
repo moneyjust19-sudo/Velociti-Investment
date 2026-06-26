@@ -29,48 +29,20 @@ export default function App() {
   }, [isDark]);
 
   // Handle successful login
-  const handleLoginSuccess = (name: string, email: string) => {
-    setUser({
-      name,
-      email,
-      balance: 100000.00, // Pre-funded simulated capital
-      invested: 45000.00,
-      returns: 14.85,
-      history: [
-        {
-          id: 'tx-1',
-          type: 'deposit',
-          amount: 50000.00,
-          title: 'Linked Bank Account Deposit',
-          date: '06/20/2026',
-          status: 'completed'
-        },
-        {
-          id: 'tx-2',
-          type: 'investment',
-          amount: 15000.00,
-          title: 'Purchased S&P 500 ETF (VOO)',
-          date: '06/21/2026',
-          status: 'completed'
-        },
-        {
-          id: 'tx-3',
-          type: 'investment',
-          amount: 10000.00,
-          title: 'Purchased Apple Inc. (AAPL)',
-          date: '06/22/2026',
-          status: 'completed'
-        },
-        {
-          id: 'tx-4',
-          type: 'investment',
-          amount: 20000.00,
-          title: 'Purchased NVIDIA Corp. (NVDA)',
-          date: '06/24/2026',
-          status: 'completed'
-        }
-      ]
-    });
+  const handleLoginSuccess = (name: string, email: string, customUser?: UserType) => {
+    if (customUser) {
+      setUser(customUser);
+    } else {
+      setUser({
+        name,
+        email,
+        balance: 0.00,
+        invested: 0.00,
+        returns: 0.00,
+        history: [],
+        portfolio: {}
+      });
+    }
     setIsLoginOpen(false);
   };
 
