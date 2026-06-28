@@ -12,7 +12,8 @@ import {
   ArrowDownLeft, LogOut, Search, PlusCircle, MinusCircle, 
   User, Bell, FileText, ChevronRight, BarChart3, LineChart, 
   Sparkles, RefreshCw, Layers, ShieldCheck, ArrowRightLeft,
-  Briefcase, Landmark, PieChart, Info, HelpCircle, Copy, Check, CheckCircle2
+  Briefcase, Landmark, PieChart, Info, HelpCircle, Copy, Check, CheckCircle2,
+  Menu, X, Mail, Phone, Send, MessageSquare
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -25,6 +26,7 @@ interface DashboardSimulationProps {
   onLogout: () => void;
   isDark: boolean;
   onToggleTheme: () => void;
+  onUserUpdate?: (updatedUser: UserType) => void;
 }
 
 const STOCK_ASSETS = [
@@ -98,7 +100,7 @@ create policy "Allow users to view own portfolio" on public.portfolio_holdings f
 drop policy if exists "Allow users to upsert own portfolio" on public.portfolio_holdings;
 create policy "Allow users to upsert own portfolio" on public.portfolio_holdings for all using (auth.uid() = user_id);`;
 
-export default function DashboardSimulation({ user, onLogout, isDark, onToggleTheme }: DashboardSimulationProps) {
+export default function DashboardSimulation({ user, onLogout, isDark, onToggleTheme, onUserUpdate }: DashboardSimulationProps) {
   const [showSqlSetup, setShowSqlSetup] = useState(supabaseErrorTracker.hasTableError);
   const [copiedSql, setCopiedSql] = useState(false);
   const [balance, setBalance] = useState(user.balance);
@@ -114,6 +116,24 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
     return user.portfolio || {};
   });
 
+  // Simple helper to synchronize with parent state safely without triggering infinite loops
+  const syncWithParent = (
+    newBalance: number,
+    newInvested: number,
+    newHistory: Transaction[],
+    newPortfolio: { [key: string]: number }
+  ) => {
+    if (onUserUpdate) {
+      onUserUpdate({
+        ...user,
+        balance: newBalance,
+        invested: newInvested,
+        history: newHistory,
+        portfolio: newPortfolio
+      });
+    }
+  };
+
   // Deposit & Withdrawal States
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [depositStep, setDepositStep] = useState<1 | 2>(1);
@@ -125,6 +145,13 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
   const [withdrawalNetwork, setWithdrawalNetwork] = useState<'solana' | 'bitcoin'>('solana');
   const [withdrawalAddress, setWithdrawalAddress] = useState('');
+
+  // Drawer & Support States
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [supportName, setSupportName] = useState(user.name || '');
+  const [supportPhone, setSupportPhone] = useState('');
+  const [supportComplaint, setSupportComplaint] = useState('');
+  const [isSupportSending, setIsSupportSending] = useState(false);
 
   // Growth Data Chart
   const [chartPeriod, setChartPeriod] = useState<'1W' | '1M' | '1Y' | 'ALL'>('1M');
@@ -191,13 +218,12 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
       };
     }
     
-    setHistory(prev => {
-      const updated = [newTx];
-      if (bonusTx) {
-        updated.push(bonusTx);
-      }
-      return [...updated, ...prev];
-    });
+    const finalTxList = [newTx];
+    if (bonusTx) {
+      finalTxList.push(bonusTx);
+    }
+    const updatedHistory = [...finalTxList, ...history];
+    setHistory(updatedHistory);
 
     if (user.id) {
       await saveTransactionInSupabase(user.id, newTx);
@@ -206,6 +232,8 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
       }
       await updateProfileBalanceInSupabase(user.id, newBalance, invested);
     }
+
+    syncWithParent(newBalance, invested, updatedHistory, portfolio);
 
     setIsDepositOpen(false);
     setDepositStep(1);
@@ -248,17 +276,56 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
       status: 'completed'
     };
 
-    setHistory(prev => [newTx, ...prev]);
+    const updatedHistory = [newTx, ...history];
+    setHistory(updatedHistory);
 
     if (user.id) {
       await saveTransactionInSupabase(user.id, newTx);
       await updateProfileBalanceInSupabase(user.id, newBalance, invested);
     }
 
+    syncWithParent(newBalance, invested, updatedHistory, portfolio);
+
     setIsWithdrawalOpen(false);
     setWithdrawalAmount('');
     setWithdrawalAddress('');
     alert(`Successfully withdrew $${amountNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}!`);
+  };
+
+  // Handle Support Form submission and open email client
+  const handleSendSupport = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supportComplaint.trim()) {
+      alert('Please fill out your complaint/message before sending.');
+      return;
+    }
+    setIsSupportSending(true);
+
+    setTimeout(() => {
+      setIsSupportSending(false);
+      
+      const subject = encodeURIComponent(`NovaX Support Complaint - ${supportName}`);
+      const body = encodeURIComponent(
+        `Support Request Information:\n` +
+        `-------------------------\n` +
+        `Client Name: ${supportName}\n` +
+        `Phone Number: ${supportPhone}\n` +
+        `Registered Email: ${user.email}\n` +
+        `Client ID: NVX-${user.id ? user.id.slice(0, 8).toUpperCase() : 'SIM'}\n\n` +
+        `Complaint Message:\n` +
+        `${supportComplaint}\n`
+      );
+
+      // Trigger standard email client composition window
+      window.location.href = `mailto:Elizabethzoe657@gmail.com?subject=${subject}&body=${body}`;
+      
+      alert('Support ticket created! A draft email has been prepared and opened in your email client to complete transmission to Elizabethzoe657@gmail.com.');
+      
+      // Clean up states
+      setSupportComplaint('');
+      setSupportPhone('');
+      setIsDrawerOpen(false);
+    }, 1000);
   };
 
   // Handle Trade Execution
@@ -279,10 +346,11 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
       
       const qty = amountNum / selectedAsset.price;
       const updatedQty = (portfolio[selectedAsset.id] || 0) + qty;
-      setPortfolio(prev => ({
-        ...prev,
+      const newPortfolio = {
+        ...portfolio,
         [selectedAsset.id]: updatedQty
-      }));
+      };
+      setPortfolio(newPortfolio);
 
       const newTx: Transaction = {
         id: 'tx-' + Math.random().toString(36).substr(2, 9),
@@ -292,13 +360,16 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
         date: new Date().toLocaleDateString(),
         status: 'completed'
       };
-      setHistory(prev => [newTx, ...prev]);
+      const updatedHistory = [newTx, ...history];
+      setHistory(updatedHistory);
 
       if (user.id) {
         await saveTransactionInSupabase(user.id, newTx);
         await updateProfileBalanceInSupabase(user.id, newBalance, newInvested);
         await updatePortfolioHoldingInSupabase(user.id, selectedAsset.id, updatedQty);
       }
+
+      syncWithParent(newBalance, newInvested, updatedHistory, newPortfolio);
     } else {
       const ownedQty = portfolio[selectedAsset.id] || 0;
       const ownedValue = ownedQty * selectedAsset.price;
@@ -313,10 +384,11 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
 
       const qtySold = amountNum / selectedAsset.price;
       const updatedQty = Math.max(0, ownedQty - qtySold);
-      setPortfolio(prev => ({
-        ...prev,
+      const newPortfolio = {
+        ...portfolio,
         [selectedAsset.id]: updatedQty
-      }));
+      };
+      setPortfolio(newPortfolio);
 
       const newTx: Transaction = {
         id: 'tx-' + Math.random().toString(36).substr(2, 9),
@@ -326,13 +398,16 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
         date: new Date().toLocaleDateString(),
         status: 'completed'
       };
-      setHistory(prev => [newTx, ...prev]);
+      const updatedHistory = [newTx, ...history];
+      setHistory(updatedHistory);
 
       if (user.id) {
         await saveTransactionInSupabase(user.id, newTx);
         await updateProfileBalanceInSupabase(user.id, newBalance, newInvested);
         await updatePortfolioHoldingInSupabase(user.id, selectedAsset.id, updatedQty);
       }
+
+      syncWithParent(newBalance, newInvested, updatedHistory, newPortfolio);
     }
   };
 
@@ -384,16 +459,6 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                 {isDark ? '☀️' : '🌙'}
               </button>
 
-              {/* User badge */}
-              <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-900 bg-slate-50 dark:bg-slate-900">
-                <div className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold">
-                  {user.name.charAt(0)}
-                </div>
-                <div className="hidden sm:block text-left">
-                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200 leading-none">{user.name}</p>
-                  <p className="text-[10px] text-slate-400 tracking-tight leading-none mt-0.5">Premium Investor</p>
-                </div>
-              </div>
 
               {/* Logout */}
               <button 
@@ -402,6 +467,15 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
               >
                 <LogOut size={14} />
                 <span className="hidden sm:inline">Sign Out</span>
+              </button>
+
+              {/* Menu Drawer Toggle */}
+              <button 
+                onClick={() => setIsDrawerOpen(true)}
+                className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 rounded-xl cursor-pointer transition-colors border border-slate-200/40 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50"
+                title="Open Account Menu"
+              >
+                <Menu size={18} />
               </button>
             </div>
           </div>
@@ -1142,6 +1216,224 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                   </div>
                 </form>
               </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Navigation Drawer */}
+        <AnimatePresence>
+          {isDrawerOpen && (
+            <div className="fixed inset-0 z-50 overflow-hidden">
+              {/* Backdrop overlay */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.5 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsDrawerOpen(false)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs cursor-pointer"
+              />
+              {/* Sliding Drawer Container */}
+              <div className="absolute inset-y-0 right-0 max-w-full flex pl-10">
+                <motion.div
+                  initial={{ x: '100%' }}
+                  animate={{ x: 0 }}
+                  exit={{ x: '100%' }}
+                  transition={{ type: 'spring', damping: 26, stiffness: 220 }}
+                  className="w-screen max-w-md bg-white dark:bg-slate-950 shadow-2xl border-l border-slate-200/80 dark:border-slate-900 flex flex-col"
+                >
+                  {/* Drawer Header */}
+                  <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-900 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900 dark:text-white font-display">Premium Portal</h2>
+                      <p className="text-xs text-slate-400">Account Control & Support Center</p>
+                    </div>
+                    <button
+                      onClick={() => setIsDrawerOpen(false)}
+                      className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  {/* Drawer Body - Scrollable */}
+                  <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {/* Profile Information Section */}
+                    <div className="space-y-3">
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Profile Information</h3>
+                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/40 dark:border-slate-800/60 space-y-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-lg font-bold border border-blue-200/30">
+                            {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-slate-900 dark:text-white text-base leading-tight">{user.name}</h4>
+                            <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-[10px] uppercase font-bold tracking-wider">
+                              Premium Investor
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="border-t border-slate-100 dark:border-slate-800/60 pt-3 space-y-2">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-400 font-medium">Email Address:</span>
+                            <span className="text-slate-700 dark:text-slate-300 font-semibold">{user.email}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-slate-400 font-medium">Security ID:</span>
+                            <span className="text-slate-700 dark:text-slate-300 font-mono">NVX-{user.id ? user.id.slice(0, 8).toUpperCase() : 'SIM'}</span>
+                          </div>
+
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Settings Section */}
+                    <div className="space-y-3">
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Account Actions</h3>
+                      <div className="grid grid-cols-1 gap-2.5">
+                        {/* Withdraw Link */}
+                        <button
+                          onClick={() => {
+                            setIsDrawerOpen(false);
+                            setIsWithdrawalOpen(true);
+                          }}
+                          className="w-full flex items-center justify-between p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-900 text-left transition-all cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/20 text-rose-500">
+                              <MinusCircle size={16} />
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-900 dark:text-white">Withdraw Capital</p>
+                              <p className="text-[10px] text-slate-400">Initiate liquid fiat transfers</p>
+                            </div>
+                          </div>
+                          <ChevronRight size={14} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                        </button>
+
+                        {/* Theme Toggle Button */}
+                        <button
+                          onClick={onToggleTheme}
+                          className="w-full flex items-center justify-between p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-900 text-left transition-all cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/20 text-blue-500">
+                              {isDark ? '☀️' : '🌙'}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-900 dark:text-white">Toggle Visual Mode</p>
+                              <p className="text-[10px] text-slate-400">Switch between light & dark themes</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-md">
+                              {isDark ? 'Dark' : 'Light'}
+                            </span>
+                            <ChevronRight size={14} className="text-slate-400 group-hover:translate-x-0.5 transition-transform" />
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Support Desk Form */}
+                    <div className="space-y-3 pt-2">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400">Contact Support</h3>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500">Online</span>
+                      </div>
+                      
+                      <form onSubmit={handleSendSupport} className="space-y-3 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/20">
+                        {/* Name Input */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Your Name</label>
+                          <div className="relative">
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                              <User size={12} />
+                            </span>
+                            <input
+                              type="text"
+                              required
+                              value={supportName}
+                              onChange={(e) => setSupportName(e.target.value)}
+                              placeholder="Full Name"
+                              className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Phone Input */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Phone Number</label>
+                          <div className="relative">
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                              <Phone size={12} />
+                            </span>
+                            <input
+                              type="tel"
+                              required
+                              value={supportPhone}
+                              onChange={(e) => setSupportPhone(e.target.value)}
+                              placeholder="+1 (555) 000-0000"
+                              className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Complaint TextArea */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Complaint / Message</label>
+                          <div className="relative">
+                            <span className="absolute top-2.5 left-3 text-slate-400">
+                              <MessageSquare size={12} />
+                            </span>
+                            <textarea
+                              required
+                              rows={3}
+                              value={supportComplaint}
+                              onChange={(e) => setSupportComplaint(e.target.value)}
+                              placeholder="Please describe your issue or question in detail..."
+                              className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-xs font-semibold text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 resize-none"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Submit Button */}
+                        <button
+                          type="submit"
+                          disabled={isSupportSending}
+                          className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/10 hover:shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          {isSupportSending ? (
+                            <>
+                              <RefreshCw size={12} className="animate-spin" />
+                              <span>Sending Ticket...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send size={12} />
+                              <span>Send Support Ticket</span>
+                            </>
+                          )}
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+
+                  {/* Drawer Footer */}
+                  <div className="p-6 border-t border-slate-100 dark:border-slate-900 bg-slate-50/50 dark:bg-slate-950/50">
+                    <button
+                      onClick={() => {
+                        setIsDrawerOpen(false);
+                        onLogout();
+                      }}
+                      className="w-full py-2.5 border border-rose-200 dark:border-rose-900/40 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <LogOut size={12} />
+                      <span>Sign Out from Dashboard</span>
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
             </div>
           )}
         </AnimatePresence>

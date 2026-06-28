@@ -249,17 +249,94 @@ export default function LoginPage({ onLoginSuccess, onClose, isModal = false }: 
       // Simulation mode
       setIsLoading(true);
       setTimeout(async () => {
-        const simUserId = 'sim-' + email.replace(/[^a-zA-Z0-9]/g, '_');
-        const userData = await loadUserData(simUserId, email);
-        setIsLoading(false);
-        setSuccess(true);
-        setTimeout(() => {
-          onLoginSuccess(
-            userData?.name || (isLogin ? (email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1)) : name),
-            email,
-            userData || undefined
-          );
-        }, 1200);
+        try {
+          const lowerEmail = email.toLowerCase().trim();
+          const simUserId = 'sim-' + lowerEmail.replace(/[^a-zA-Z0-9]/g, '_');
+          
+          // Load existing simulated accounts registry
+          const simAccounts = JSON.parse(localStorage.getItem('novax_sim_accounts') || '{}');
+          
+          if (isLogin) {
+            // Check if the account exists
+            const account = simAccounts[lowerEmail];
+            if (!account) {
+              // Fallback check: maybe they created a profile in previous versions of the simulation without a password
+              const localProfiles = JSON.parse(localStorage.getItem('novax_profiles') || '{}');
+              if (localProfiles[simUserId]) {
+                // Let's create a simulated account entry for them now using their input password
+                simAccounts[lowerEmail] = {
+                  name: localProfiles[simUserId].name,
+                  email: lowerEmail,
+                  password: password,
+                  userId: simUserId
+                };
+                localStorage.setItem('novax_sim_accounts', JSON.stringify(simAccounts));
+              } else {
+                throw new Error('No account found with this email. Please sign up first.');
+              }
+            } else {
+              // Validate password
+              if (account.password !== password) {
+                throw new Error('Incorrect password. Please try again.');
+              }
+            }
+            
+            const userData = await loadUserData(simUserId, email);
+            setIsLoading(false);
+            setSuccess(true);
+            setTimeout(() => {
+              onLoginSuccess(
+                account?.name || userData?.name || (email.split('@')[0].charAt(0).toUpperCase() + email.split('@')[0].slice(1)),
+                email,
+                userData || undefined
+              );
+            }, 1200);
+            
+          } else {
+            // Registering a new account
+            if (simAccounts[lowerEmail]) {
+              throw new Error('An account with this email address already exists. Please sign in instead.');
+            }
+            
+            // Create new simulated account entry
+            simAccounts[lowerEmail] = {
+              name: name.trim(),
+              email: lowerEmail,
+              password: password,
+              userId: simUserId
+            };
+            localStorage.setItem('novax_sim_accounts', JSON.stringify(simAccounts));
+            
+            // Initialize user profile in novax_profiles
+            const localProfiles = JSON.parse(localStorage.getItem('novax_profiles') || '{}');
+            if (!localProfiles[simUserId]) {
+              localProfiles[simUserId] = {
+                id: simUserId,
+                name: name.trim(),
+                email: lowerEmail,
+                balance: 0.00,
+                invested: 0.00,
+                returns: 0.00
+              };
+              localStorage.setItem('novax_profiles', JSON.stringify(localProfiles));
+            }
+            
+            const userData = await loadUserData(simUserId, email);
+            setIsLoading(false);
+            setSuccess(true);
+            setTimeout(() => {
+              onLoginSuccess(
+                name.trim(),
+                email,
+                userData || undefined
+              );
+            }, 1200);
+          }
+        } catch (err: any) {
+          console.error('Simulation authentication error:', err);
+          setError(err.message || 'An error occurred during authentication.');
+          setIsLoading(false);
+        }
       }, 1500);
     }
   };

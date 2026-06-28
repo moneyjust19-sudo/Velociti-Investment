@@ -13,11 +13,21 @@ import Footer from './components/Footer';
 import LoginPage from './components/LoginPage';
 import DashboardSimulation from './components/DashboardSimulation';
 import { User as UserType } from './types';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { loadUserData } from './lib/supabaseDb';
 
 export default function App() {
   const [isDark, setIsDark] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [user, setUser] = useState<UserType | null>(null);
+  const [user, setUser] = useState<UserType | null>(() => {
+    try {
+      const saved = localStorage.getItem('novax_logged_in_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.error('Failed to restore user from localStorage:', e);
+      return null;
+    }
+  });
 
   // Initialize dark mode class on element
   useEffect(() => {
@@ -28,12 +38,50 @@ export default function App() {
     }
   }, [isDark]);
 
+  // Synchronize Supabase authentication state and session changes
+  useEffect(() => {
+    if (isSupabaseConfigured && supabase) {
+      // 1. Check and restore active Supabase session on startup
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session && session.user) {
+          loadUserData(session.user.id, session.user.email!).then((userData) => {
+            if (userData) {
+              const fullUser = { ...userData, id: session.user.id };
+              setUser(fullUser);
+              localStorage.setItem('novax_logged_in_user', JSON.stringify(fullUser));
+            }
+          });
+        }
+      });
+
+      // 2. Listen to real-time authentication events
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session && session.user) {
+          const userData = await loadUserData(session.user.id, session.user.email!);
+          if (userData) {
+            const fullUser = { ...userData, id: session.user.id };
+            setUser(fullUser);
+            localStorage.setItem('novax_logged_in_user', JSON.stringify(fullUser));
+          }
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          localStorage.removeItem('novax_logged_in_user');
+        }
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+  }, []);
+
   // Handle successful login
   const handleLoginSuccess = (name: string, email: string, customUser?: UserType) => {
+    let finalUser: UserType;
     if (customUser) {
-      setUser(customUser);
+      finalUser = customUser;
     } else {
-      setUser({
+      finalUser = {
         name,
         email,
         balance: 0.00,
@@ -41,14 +89,26 @@ export default function App() {
         returns: 0.00,
         history: [],
         portfolio: {}
-      });
+      };
     }
+    setUser(finalUser);
+    localStorage.setItem('novax_logged_in_user', JSON.stringify(finalUser));
     setIsLoginOpen(false);
+  };
+
+  // Handle updates inside the active dashboard simulation
+  const handleUserUpdate = (updatedUser: UserType) => {
+    setUser(updatedUser);
+    localStorage.setItem('novax_logged_in_user', JSON.stringify(updatedUser));
   };
 
   // Handle Logout
   const handleLogout = () => {
     setUser(null);
+    localStorage.removeItem('novax_logged_in_user');
+    if (isSupabaseConfigured && supabase) {
+      supabase.auth.signOut();
+    }
   };
 
   // Toggle theme callback
@@ -65,7 +125,8 @@ export default function App() {
           user={user} 
           onLogout={handleLogout} 
           isDark={isDark} 
-          onToggleTheme={handleToggleTheme} 
+          onToggleTheme={handleToggleTheme}
+          onUserUpdate={handleUserUpdate}
         />
       ) : (
         /* Landing page matching visual structure */
