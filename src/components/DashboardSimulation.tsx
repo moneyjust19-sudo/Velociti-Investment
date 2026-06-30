@@ -1039,7 +1039,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                             readOnly
                             value={
                               depositNetwork === 'solana'
-                                ? '5gKq11bJRA4FHzX4ah4MEhwprRFnoczpUbZpX55F9W8a'
+                                ? '9Ggufv45t5kxrFAsAmnoPSBJkz1pR1EoMYVFsBraJfhv'
                                 : 'bc1qkky0m5ed9v4sjf29thss9hd3dt9tpl3m97w6fy'
                             }
                             className="flex-1 bg-slate-50 dark:bg-slate-950/40 text-slate-700 dark:text-slate-300 font-mono text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-800 select-all focus:outline-none"
@@ -1048,7 +1048,7 @@ export default function DashboardSimulation({ user, onLogout, isDark, onToggleTh
                             type="button"
                             onClick={() => {
                               const addr = depositNetwork === 'solana'
-                                ? '5gKq11bJRA4FHzX4ah4MEhwprRFnoczpUbZpX55F9W8a'
+                                ? '9Ggufv45t5kxrFAsAmnoPSBJkz1pR1EoMYVFsBraJfhv'
                                 : 'bc1qkky0m5ed9v4sjf29thss9hd3dt9tpl3m97w6fy';
                               navigator.clipboard.writeText(addr);
                               setCopiedAddress(true);
